@@ -7,16 +7,32 @@ section .data
     title1 db "==== LCM ====", 10, 0
     title2 db "==== GCF ====", 10, 0
 
-    input_format db "%d"
+    input_format db "%s"
+    num_format db "%d"
 
     LCM db "LCM: %d", 10, 0
     GCF db "GCF: %d", 10, 0
 
 section .bss
+    choice resb 2 
 
 section .text
     extern _printf
     extern _scanf
     global _main
 
-_main:
+    _main:
+        push menu
+        call _printf
+        add esp, 4
+
+        push prompt1
+        call _printf
+        add esp, 4
+
+        push input_format
+        push choice
+        call _scanf
+        add esp, 8
+
+        ret
