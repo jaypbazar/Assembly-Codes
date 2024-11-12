@@ -19,9 +19,12 @@ section .data
 
 section .bss
     choice resw 1
+    
     num1 resd 1
     num2 resd 1
     num3 resd 1
+
+    gcf resd 1
 
 section .text
     extern _printf
@@ -29,17 +32,38 @@ section .text
     global _main
 
 calculate_lcm:
-    ret
+    ; set up base pointer
+    mov ebp, esp
+
+    ; find the gcf of first two numbers
+    push gcf
+    push dword [ebp + 4]
+    push dword [ebp + 8]
+    call calculate_gcf
+    
+    ; multiply 1st number by 2nd number
+    mov eax, [ebp + 8]
+    mov ebx, [ebp + 4]
+    mul ebx 
+
+    ; divide by the gcf
+    mov edx, 0 ; clear edx register
+    div dword [gcf]
+    
+    ret 8
 
 calculate_gcf:
     ; set up base pointer
     mov ebp, esp
 
+    ; move the address of gcf variable to ecx register
+    mov ecx, [ebp+12]
+
     ; move the value num1 and num2 from stack to registers
     mov eax, [ebp+8]
     mov ebx, [ebp+4]
 
-    loop_start:
+    gcf_loop_start:
         mov edx, 0 ; clear edx register before division
 
         ; divide 1st num by 2nd num, remainder in edx
@@ -49,17 +73,20 @@ calculate_gcf:
         mov eax, ebx
         mov ebx, edx
 
+        ; store the result in the address of gcf variable
+        mov [ecx], eax
+
         ; check if remainder is 0 then terminate
         cmp ebx, 0
-        jz loop_end
+        jz gcf_loop_end
 
-        jmp loop_start ; jump back to start of loop
+        jmp gcf_loop_start ; jump back to start of loop
 
-    loop_end:
+    gcf_loop_end:
         ; restore stack pointer to original value
         mov esp, ebp 
 
-        ret 8
+        ret 12
 
 get_nums:
     input_loop_start:
@@ -152,6 +179,7 @@ _main:
 
             ret
 
+        ; Pass by value
         case_1:
             ; ==== LCM ====
             push title1
@@ -161,16 +189,26 @@ _main:
             ; get num inputs
             call get_nums
 
-            ; get the lcm
-            push num3
-            push num2
-            push num1
+            ; get the lcm of first 2 numbers
+            push dword [num1]
+            push dword [num2]
             call calculate_lcm
-            add esp, 12
+
+            ; include the 3rd number
+            push eax
+            push dword [num3]
+            call calculate_lcm
+
+            ; display the lcm
+            push eax
+            push LCM
+            call _printf
+            add esp, 8
 
             jmp main_loop_start
 
-        case_2:
+        ; Pass by reference
+        case_2: 
             ; ==== GCF ====
             push title2
             call _printf
@@ -180,20 +218,21 @@ _main:
             call get_nums
             
             ; get the gcf of first 2 numbers
+            push gcf
             push dword [num1]
             push dword [num2]
             call calculate_gcf
 
             ; get the gcf of num3 and the previous numbers' gcf
+            push gcf
             push eax
             push dword [num3]
             call calculate_gcf
 
             ; display the gcf
-            push eax
+            push dword [gcf]
             push GCF
             call _printf
             add esp, 8
 
             jmp main_loop_start
-
