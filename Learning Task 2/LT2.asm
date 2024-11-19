@@ -223,7 +223,7 @@ _main:
             push dword [num2]
             call calculate_gcf
 
-            ; get the gcf of num3 and the previous numbers' gcf
+            ; include the 3rd number
             push gcf
             push eax
             push dword [num3]
@@ -236,3 +236,5 @@ _main:
             add esp, 8
 
             jmp main_loop_start
+    
+    ret
