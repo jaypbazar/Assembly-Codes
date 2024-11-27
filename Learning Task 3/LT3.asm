@@ -127,9 +127,22 @@ _main:
             jmp main_loop_start
 
         case_2:
-            push input_prompt
+            ; get inputs and store to words_arr
+            push words_arr
+            call input_words
+
+            ; repeat input if any of the input is not a word
+            cmp ebx, 0
+            jnz word_input_valid
+
+            ; display error message
+            push input_word_error_msg
             call _printf
             add esp, 4
+
+            jmp case_2 ; repeat input
+
+            word_input_valid:
 
             jmp main_loop_start
 
@@ -194,7 +207,7 @@ input_nums:
     mov ecx, 5 ; array size
 
     ; asks for number input
-    input_loop_start:
+    num_input_loop_start:
         ; preserve values in stack
         push ecx 
 
@@ -207,7 +220,7 @@ input_nums:
         cmp eax, 1 ; check if input is accepted
         je next_input
 
-        mov dword[esi], 0 ; ; declare value as 0 if not a number
+        mov dword[esi], 0 ; declare value as 0 if not a number
         mov ebx, 0 ; set to false
 
         ; If input fails, clear input buffer
@@ -225,7 +238,7 @@ input_nums:
         add esi, 4
         
         ; reapeat input until ecx is 0
-        loop input_loop_start
+        loop num_input_loop_start
 
     ; destroy stack frame and return
     mov esp, ebp
@@ -292,4 +305,68 @@ sort_nums:
     ret
 
 input_words:
+    ; create stack frame
+    mov ebp, esp
+
+    ; display input prompt
+    push input_prompt
+    call _printf
+    add esp, 4
+
+    mov esi, [ebp + 4] ; address of array 
+
+    mov ebx, 1 ; initialized ebx to true as default
+
+    mov ecx, 5 ; array size
+
+    word_input_loop_start:
+        ; preserve values in stack
+        push ecx 
+
+        ; get input for each item in list
+        push esi
+        push string_format
+        call _scanf
+        add esp, 8
+
+        push esi ; preserve value in esi
+
+        ; check each character on the string for non-alphabet
+        validate_char_loop:
+        
+            lodsb ; load 1 character from esi to al register, esi + 1
+
+            ; check for end of string
+            cmp al, 0
+            je validate_done
+
+            ; check if character is uppercase A-Z
+            cmp al, 'A'
+            jl not_word
+            cmp al, 'Z'
+            jle valid_char
+
+            ; check if character is lowercase a-z
+            cmp al, 'a'
+            jl not_word
+            cmp al, 'z'
+            jg not_word
+
+            valid_char:
+                jmp validate_char_loop
+
+        not_word:
+            mov ebx, 0
+
+        validate_done:
+            pop esi ; retrieve value in esi
+
+        add esi, 10 ; move to the next item
+
+        pop ecx ; retrieve value of ecx
+
+        loop word_input_loop_start
+
+    ; destroy stack and return
+    mov esp, ebp
     ret
