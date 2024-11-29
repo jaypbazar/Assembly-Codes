@@ -5,8 +5,9 @@ section .data
     choice_prompt db  "Enter choice: ", 0
     input_prompt db "Enter up to 5 items: ", 10, 0
     sort_prompt db "Sort by [1] Ascending or [2] Descending: ", 0
-    sorted_prompt db "Sorted items: ", 10, 0
-    change_num_prompt db "Do you want to change the vowels? (Y/N): ", 0
+    sorted_prompt db "Sorted items:", 10, 0
+    change_vowel_prompt db "Do you want to change the vowels? (Y/N): ", 0
+    replaced_prompt db "Changed vowels:", 10, 0
 
     input_num_error_msg db "Error: Invalid input. Please enter only numbers.", 10, 0
     input_word_error_msg db "Error: Invalid input. Please enter only words.", 10, 0
@@ -16,10 +17,14 @@ section .data
     num_format db "%d", 0
     print_num_format db "%d", 10, 0
     string_format db "%s", 0
+    print_word_format db "%s", 10, 0
+
+    STRING_SIZE db 20 ; 20 bytes each word
+    ARRAY_SIZE db 5 ; number of items
 
 section .bss
     nums_arr resd 5 ; 5 items 4 bytes each
-    words_arr resb 50 ; 5 items 10 bytes each
+    words_arr resb 100 ; 5 items 20 bytes each
     choice resb 1
 
 section .text
@@ -102,29 +107,32 @@ _main:
 
             sort_done:
             ; display sorted numbers
+            lea esi, [nums_arr] ; load address of array in esi
+            
+            ; display prompt
             push sorted_prompt
             call _printf
             add esp, 4
 
-            lea esi, [nums_arr]
-            mov ecx, 5
-            num_print_loop:
-                mov ebx, [esi]
+            mov ecx, dword[ARRAY_SIZE] ; size of array
 
-                push ecx
-
-                push ebx
+            ; print each number in the array
+            display_num_loop:
+                push ecx ; preserve value of counter
+            
+                ; print number
+                push dword[esi]
                 push print_num_format
                 call _printf
                 add esp, 8
 
-                add esi, 4
+                add esi, 4 ; move to next element
+                
+                pop ecx ; retrieve value of counter
 
-                pop ecx
+                loop display_num_loop ; loop until counter is 0, decrement ecx
 
-                loop num_print_loop
-
-            jmp main_loop_start
+            jmp main_loop_start ; go back to main menu
 
         case_2:
             ; get inputs and store to words_arr
@@ -143,8 +151,120 @@ _main:
             jmp case_2 ; repeat input
 
             word_input_valid:
+            
+            ; pass 2 arguments and call input_choice function
+            push 1           ; lower bound of choice range
+            push sort_prompt ; prompt to display
+            call input_choice
 
-            jmp main_loop_start
+            ; check if user choose to sort asc or desc
+            cmp byte[choice], 1
+            je sort_word_asc
+            cmp byte[choice], 2
+            je sort_word_desc
+
+            sort_word_asc:
+                push 1 ; sorting direction, 1 = ascending
+                push words_arr ; array to sort
+                call sort_words
+
+                jmp word_sort_done
+            
+            sort_word_desc:
+                push 0 ; sorting direction, 0 = descending
+                push words_arr ; array to sort
+                call sort_words
+
+            word_sort_done:
+
+            ; display sorted words
+            push sorted_prompt
+            push words_arr
+            call display_words
+
+            ; ask user if they want to change the vowels
+            changing_vowels:
+            push change_vowel_prompt
+            call _printf
+            add esp, 4
+
+            ; ask for choice
+            push choice
+            push string_format
+            call _scanf
+            add esp, 8
+
+            ; if Y or y change vowels
+            cmp byte[choice], 'y'
+            je change_vowels
+            cmp byte[choice], 'Y'
+            je change_vowels
+
+            ; if N or n don't change
+            cmp byte[choice], 'n'
+            je not_change
+            cmp byte[choice], 'N'
+            je not_change
+
+            ; if choice is not any of the above then invalid
+            push choice_error_msg
+            call _printf
+            add esp, 4
+
+            change_vowels:
+                push words_arr
+                call replace_vowels
+
+                push replaced_prompt
+                push words_arr
+                call display_words
+            
+            not_change:
+
+            jmp main_loop_start ; go back to main menu
+
+display_words:
+    ; create stack frame
+    mov ebp, esp 
+    
+    mov esi, [ebp + 4] ; store address of array in esi
+    mov ebx, [ebp + 8] ; prompt to print
+                    
+    ; display prompt
+    push ebx
+    call _printf
+    add esp, 4
+
+    mov ecx, dword[ARRAY_SIZE] ; store array size in ecx
+
+    ; print each word in the array
+    display_word_loop:
+        push ecx ; preserve value of counter
+
+        ; print word
+        push esi
+        push print_word_format
+        call _printf
+        add esp, 8
+
+        add esi, dword[STRING_SIZE] ; move to next element
+        
+        pop ecx ; retrieve value of counter
+
+        loop display_word_loop ; loop until counter is 0, decrement ecx
+
+    ; destroy stack frame then return
+    mov esp, ebp
+    ret
+
+clear_buffer:
+    clear_input_buffer:
+        ; read and discard characters until newline
+        call _getchar
+        cmp eax, 10
+        jne clear_input_buffer
+
+    ret
 
 input_choice:
     ; create stack frame
@@ -154,42 +274,50 @@ input_choice:
     push eax
     push ebx
 
-    mov eax, [ebp + 4] ; prompt
-    mov ebx, [ebp + 8] ; lower bound of range
+    start_input:
+        mov eax, [ebp + 4] ; prompt
+        mov ebx, [ebp + 8] ; lower bound of range
 
-    ; display prompt
-    push eax
-    call _printf
-    add esp, 4
+        ; display prompt
+        push eax
+        call _printf
+        add esp, 4
 
-    ; get input for choice
-    push choice
-    push num_format
-    call _scanf
-    add esp, 8
+        ; get input for choice
+        push choice
+        push num_format
+        call _scanf
+        add esp, 8
 
-    ; check if input is within range
-    cmp dword[choice], ebx 
-    jl invalid_choice
-    cmp dword[choice], 2
-    jg invalid_choice
+        ; check if user entered a non-numeric value
+        cmp eax, 1
+        jne invalid_choice
 
-    ; restore the values
-    pop ebx
-    pop eax
+        ; check if input is within range
+        cmp dword [choice], ebx
+        jl invalid_choice
+        cmp dword [choice], 2
+        jg invalid_choice
 
-    ; destroy stack frame and return to caller
-    mov esp, ebp
-    ret 
+        ; restore the values
+        pop ebx
+        pop eax
 
-    ; display error message
+        ; destroy stack frame and return to caller
+        mov esp, ebp
+        ret
+
     invalid_choice:
-    push choice_error_msg
-    call _printf
-    add esp, 4
+        ; clear buffer if input fails
+        call clear_buffer
 
-    ; return to start of function
-    jmp input_choice
+        ; display error message
+        push choice_error_msg
+        call _printf
+        add esp, 4
+
+        ; loop back to start of input
+        jmp start_input
 
 input_nums:
     ; create stack frame
@@ -204,7 +332,7 @@ input_nums:
 
     mov ebx, 1 ; initialized ebx to true as default
 
-    mov ecx, 5 ; array size
+    mov ecx, dword[ARRAY_SIZE]
 
     ; asks for number input
     num_input_loop_start:
@@ -220,15 +348,10 @@ input_nums:
         cmp eax, 1 ; check if input is accepted
         je next_input
 
-        mov dword[esi], 0 ; declare value as 0 if not a number
         mov ebx, 0 ; set to false
 
-        ; If input fails, clear input buffer
-        clear_input_buffer:
-            ; Read and discard characters until newline
-            call _getchar
-            cmp eax, 10  ; newline character
-            jne clear_input_buffer
+        ; clear input buffer if input fails
+        call clear_buffer
 
         next_input:
         ; restore value from stack
@@ -255,14 +378,14 @@ sort_nums:
 
     sort_outer_loop:
         ; done sorting if index is 5
-        cmp ecx, 5 
+        cmp ecx, dword[ARRAY_SIZE] 
         jge outer_loop_done
 
         mov ebx, ecx
         inc ebx ; start from next item
 
         sort_inner_loop:
-            cmp ebx, 5
+            cmp ebx, dword[ARRAY_SIZE]
             jge inner_loop_done
 
             mov eax, [esi + ecx*4] ; address of min/max
@@ -315,58 +438,166 @@ input_words:
 
     mov esi, [ebp + 4] ; address of array 
 
-    mov ebx, 1 ; initialized ebx to true as default
+    mov ebx, 1 ; initialize ebx to true (1) as default
 
-    mov ecx, 5 ; array size
+    mov ecx, dword[ARRAY_SIZE] ; store array size to ecx
 
-    word_input_loop_start:
+    word_input_loop:
         ; preserve values in stack
+        push esi 
         push ecx 
 
-        ; get input for each item in list
+        ; get input for current item in array
         push esi
         push string_format
         call _scanf
         add esp, 8
 
-        push esi ; preserve value in esi
+        pop ecx ; restore counter afer using printf
 
-        ; check each character on the string for non-alphabet
         validate_char_loop:
-        
+            cld ; clear direction
             lodsb ; load 1 character from esi to al register, esi + 1
-
+        
             ; check for end of string
             cmp al, 0
             je validate_done
-
+        
             ; check if character is uppercase A-Z
             cmp al, 'A'
             jl not_word
             cmp al, 'Z'
             jle valid_char
-
+        
             ; check if character is lowercase a-z
             cmp al, 'a'
             jl not_word
             cmp al, 'z'
             jg not_word
-
+        
             valid_char:
                 jmp validate_char_loop
-
+        
         not_word:
-            mov ebx, 0
+            mov ebx, 0 ; set to false (0) if not a word
 
         validate_done:
-            pop esi ; retrieve value in esi
+            pop esi ; restore esi afer using lodsb
 
-        add esi, 10 ; move to the next item
+        ; move to next string address
+        add esi, dword[STRING_SIZE]
 
-        pop ecx ; retrieve value of ecx
-
-        loop word_input_loop_start
+        loop word_input_loop ; loop until ecx is 0, ecx - 1
 
     ; destroy stack and return
     mov esp, ebp
     ret
+
+sort_words:
+    ; create stack frame
+    mov ebp, esp
+
+    mov esi, [ebp + 4] ; array to sort
+    mov ebx, [ebp + 8] ; sorting order (1 = ascending, 2 = descending)
+
+    ; NOTE: Implement functionality HERE
+
+    ; destroy the stack and return
+    mov esp, ebp
+    ret
+
+replace_vowels:
+    ; create stack frame
+    mov ebp, esp
+
+    ; preserve values in stack
+    push esi
+    push edi
+    push eax
+
+    mov edi, [ebp + 4] ; array to replace vowels
+    
+    mov ecx, dword[ARRAY_SIZE] ; counter for number of elements in array
+
+    string_loop_start:
+        ; check if index is 5
+        cmp ecx, 0
+        je string_loop_end
+
+        mov esi, edi ; store current string to esi
+
+        ; check every vowel inside string and replace with number
+        char_loop_start:
+            cld ; clear direction
+            lodsb ; load the current character to al, esi + 1
+
+            ; check for end of string
+            cmp al, 0
+            je vowel_loop_end
+
+            ; replace lowercase vovels
+            cmp al, 'a'
+            je replace_by_1
+            cmp al, 'e'
+            je replace_by_2
+            cmp al, 'i'
+            je replace_by_3
+            cmp al, 'o'
+            je replace_by_4
+            cmp al, 'u'
+            je replace_by_5
+
+            ; replace uppercase vovels
+            cmp al, 'A'
+            je replace_by_1
+            cmp al, 'E'
+            je replace_by_2
+            cmp al, 'I'
+            je replace_by_3
+            cmp al, 'O'
+            je replace_by_4
+            cmp al, 'U'
+            je replace_by_5
+
+            jmp replace_end ; no replacement needed
+
+            replace_by_1:
+                mov al, '1'
+                jmp replace_end
+
+            replace_by_2:
+                mov al, '2'
+                jmp replace_end
+
+            replace_by_3:
+                mov al, '3'
+                jmp replace_end
+
+            replace_by_4:
+                mov al, '4'
+                jmp replace_end
+
+            replace_by_5:
+                mov al, '5'
+
+            replace_end:
+                mov [esi - 1], al ; store the replaced value in the memory
+
+            jmp char_loop_start
+        
+        vowel_loop_end:
+
+        add edi, dword[STRING_SIZE] ; move to the next item 
+
+        loop string_loop_start
+
+    string_loop_end:
+    ; restore values
+    pop eax
+    pop edi
+    pop esi
+
+    ; destroy the stack and return
+    mov esp, ebp
+    ret
+
