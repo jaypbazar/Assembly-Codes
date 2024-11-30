@@ -19,18 +19,20 @@ section .data
     string_format db "%s", 0
     print_word_format db "%s", 10, 0
 
-    STRING_SIZE db 20 ; 20 bytes each word
-    ARRAY_SIZE db 5 ; number of items
+    STRING_SIZE equ 20 ; 20 bytes each word
+    ARRAY_SIZE equ 5 ; number of items
 
 section .bss
-    nums_arr resd 5 ; 5 items 4 bytes each
-    words_arr resb 100 ; 5 items 20 bytes each
+    nums_arr resd ARRAY_SIZE ; 5 items 4 bytes each
+    words_arr resb STRING_SIZE * ARRAY_SIZE ; 5 items 20 bytes each
     choice resb 1
+    temp resb STRING_SIZE ; temporary storage for swapping
 
 section .text
     extern _scanf
     extern _printf
     extern _getchar
+    extern _strcmp
     global _main
 
 _main:
@@ -114,7 +116,7 @@ _main:
             call _printf
             add esp, 4
 
-            mov ecx, dword[ARRAY_SIZE] ; size of array
+            mov ecx, ARRAY_SIZE ; size of array
 
             ; print each number in the array
             display_num_loop:
@@ -211,6 +213,8 @@ _main:
             call _printf
             add esp, 4
 
+            jmp changing_vowels ; repeat choice input
+
             change_vowels:
                 push words_arr
                 call replace_vowels
@@ -235,7 +239,7 @@ display_words:
     call _printf
     add esp, 4
 
-    mov ecx, dword[ARRAY_SIZE] ; store array size in ecx
+    mov ecx, ARRAY_SIZE ; store array size in ecx
 
     ; print each word in the array
     display_word_loop:
@@ -247,7 +251,7 @@ display_words:
         call _printf
         add esp, 8
 
-        add esi, dword[STRING_SIZE] ; move to next element
+        add esi, STRING_SIZE ; move to next element
         
         pop ecx ; retrieve value of counter
 
@@ -332,7 +336,7 @@ input_nums:
 
     mov ebx, 1 ; initialized ebx to true as default
 
-    mov ecx, dword[ARRAY_SIZE]
+    mov ecx, ARRAY_SIZE
 
     ; asks for number input
     num_input_loop_start:
@@ -378,14 +382,14 @@ sort_nums:
 
     sort_outer_loop:
         ; done sorting if index is 5
-        cmp ecx, dword[ARRAY_SIZE] 
+        cmp ecx, ARRAY_SIZE 
         jge outer_loop_done
 
         mov ebx, ecx
         inc ebx ; start from next item
 
         sort_inner_loop:
-            cmp ebx, dword[ARRAY_SIZE]
+            cmp ebx, ARRAY_SIZE
             jge inner_loop_done
 
             mov eax, [esi + ecx*4] ; address of min/max
@@ -440,7 +444,7 @@ input_words:
 
     mov ebx, 1 ; initialize ebx to true (1) as default
 
-    mov ecx, dword[ARRAY_SIZE] ; store array size to ecx
+    mov ecx, ARRAY_SIZE ; store array size to ecx
 
     word_input_loop:
         ; preserve values in stack
@@ -485,7 +489,7 @@ input_words:
             pop esi ; restore esi afer using lodsb
 
         ; move to next string address
-        add esi, dword[STRING_SIZE]
+        add esi, STRING_SIZE
 
         loop word_input_loop ; loop until ecx is 0, ecx - 1
 
@@ -497,10 +501,91 @@ sort_words:
     ; create stack frame
     mov ebp, esp
 
-    mov esi, [ebp + 4] ; array to sort
-    mov ebx, [ebp + 8] ; sorting order (1 = ascending, 2 = descending)
+    mov esi, [ebp + 4] ; store to esi the address of 2st string
+    mov edx, [ebp + 8] ; sorting order (1 = ascending, 0 = descending)
 
-    ; NOTE: Implement functionality HERE
+    mov ecx, 1 ; initialize counter to 1 for array_size-1 iterations
+
+    word_outer_loop:
+        ; store address of 2nd string in edi
+        mov edi, esi
+        add edi, STRING_SIZE
+
+        ; initialize inner loop counter to outer loop counter
+        mov ebx, ecx 
+
+        word_inner_loop:
+            cmp edx, 0
+            je descending_words
+
+            ; preserve indexes in stack
+            push esi
+            push edi
+            ; compare the two strings
+            mov ecx, STRING_SIZE
+            repe cmpsb ; compare the strings in esi and edi registers
+            ; restore indexes
+            pop edi
+            pop esi
+            
+            ja not_swap_words ; not swap if 1st > 2nd
+            jmp swap_words
+            
+            descending_words:
+                ; preserve indexes in stack
+                push esi
+                push edi
+                ; compare the two strings
+                mov ecx, STRING_SIZE
+                repe cmpsb ; compare the strings in esi and edi registers
+                ; restore indexes
+                pop edi
+                pop esi
+                
+                jb not_swap_words ; not swap if 1st < 2nd
+
+            swap_words:
+                ; swap the values in esi and edi
+                push ecx
+                push esi
+                push edi
+                
+                mov ecx, STRING_SIZE
+                mov esi, [esp+4]
+                mov edi, temp
+                rep movsb
+                
+                mov ecx, STRING_SIZE
+                mov esi, [esp]
+                mov edi, [esp+4]
+                rep movsb
+                
+                mov ecx, STRING_SIZE
+                mov esi, temp
+                mov edi, [esp]
+                rep movsb
+                
+                pop edi
+                pop esi
+                pop ecx
+
+            not_swap_words:
+                ; move to the next 2nd string
+                add edi, STRING_SIZE 
+
+                inc ebx ; increment inner loop counter
+
+                ; loop while ebx is less than array size
+                cmp ebx, ARRAY_SIZE
+                jl word_inner_loop
+
+        add esi, STRING_SIZE ; move to next 1st string
+
+        inc ecx ; increment outer loop counter
+
+    ; loop while ecx < array size
+    cmp ecx, ARRAY_SIZE  
+    jl word_outer_loop 
 
     ; destroy the stack and return
     mov esp, ebp
@@ -517,7 +602,7 @@ replace_vowels:
 
     mov edi, [ebp + 4] ; array to replace vowels
     
-    mov ecx, dword[ARRAY_SIZE] ; counter for number of elements in array
+    mov ecx, ARRAY_SIZE ; counter for number of elements in array
 
     string_loop_start:
         ; check if index is 5
@@ -587,7 +672,7 @@ replace_vowels:
         
         vowel_loop_end:
 
-        add edi, dword[STRING_SIZE] ; move to the next item 
+        add edi, STRING_SIZE ; move to the next item 
 
         loop string_loop_start
 
