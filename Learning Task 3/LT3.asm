@@ -32,7 +32,6 @@ section .text
     extern _scanf
     extern _printf
     extern _getchar
-    extern _strcmp
     global _main
 
 _main:
