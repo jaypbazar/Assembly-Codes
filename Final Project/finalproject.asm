@@ -198,6 +198,9 @@ _main:
             call _scanf
             add esp, 8
 
+            cmp eax, 1
+            jne invalid_number
+
             mov ebx, dword[task_number]
 
             ; compare if task number is within the task list range
